@@ -1,0 +1,1101 @@
+---
+title: 'STA 380: Intro to Machine Learning Pt.2'
+author: "Anthony Huang"
+date: "8/13/2021"
+output: md_document
+---
+## Visual story telling part 1: green buildings
+
+```{r, include=FALSE}
+#read csv file and attach dataset for convenience
+green <- read.csv("greenbuildings.csv")
+attach(green)
+dim(green)
+```
+
+The "Excel Guru"'s analysis has several oversights that ultimately makes his forecast unconvincing. Since the analysis is based on the median rent of all buildings, the rent variable is confounded with multiple variables that are not accounted for. Size of the building, occupancy rate, location, and class are all features that may affect the rent level, which are not considered in the "Excel Guru"'s analysis.
+
+We first check whether the cleaning the outliers from the data set is warranted by checking whether the "Excel Guru"'s theory is valid. The claim is that the buildings with leasing rate of lower than 10% are ones that have something weird going on and could potentially distort the analysis. We find that the staff cleaned out 215 buildings out of 7894, which does not affect the data set too much.
+
+Summary of Rent (Green Buildings) after Data Cleaning:
+
+```{r subset, include=FALSE}
+leasing_under10 <- subset(green, leasing_rate < 10) #create subset for leasing rate lower than 10, which was cleaned by the guru
+leasing_above10 <- subset(green, leasing_rate >=10) #subset for leasing rate higher than 10
+nrow(leasing_under10) #number of rows in this subset
+```
+```{r green summary>10, echo=FALSE,warning=FALSE,message=FALSE}
+green_above10 <-subset(leasing_above10,green_rating == 1) #create a subset for green buildings in the guru's data set
+nongreen_above10<-subset(leasing_above10,green_rating == 0) #subset for nongreen buildings in the guru's data set
+summary(green_above10$Rent)
+```
+
+Summary of Rent (Non-Green Buildings) after Data Cleaning:
+
+```{r nongreen summary>10, echo=FALSE,warning=FALSE,message=FALSE}
+summary(nongreen_above10$Rent)
+```
+
+Summary of Rent (Green Buildings) of entire dataset:
+
+```{r green all, echo=FALSE,warning=FALSE,message=FALSE}
+green_all <- subset(green,green_rating == 1 ) #create a subset for green buildings in the entire data set
+nongreen_all <-subset(green,green_rating == 0)#create a subset for non- green buildings in the entire data set
+summary(green_all$Rent)
+```
+
+Summary of Rent (Non-Green Buildings) of entire dataset:
+```{r nongreen all, echo=FALSE,warning=FALSE,message=FALSE}
+summary(nongreen_all$Rent)
+```
+
+After checking the summary of rent for pre-data cleaning and after data cleaning, we find that removing the outliers does not change the mean by much. This may suggest that the data cleaning step was useless, and other actions should be taken. Let's try to plot occupancy rate versus rent to see if there are obvious outliers on the graph.
+
+```{r plot1, echo=FALSE,warning=FALSE,message=FALSE}
+plot(leasing_rate,  #plot occupancy rate for normal and removed data points
+     Rent,
+     col = "Red", 
+     pch=8,
+     main = "Occupancy Rate Comparison for Normal and Removed",
+     ylab = "rent",
+     xlab = "occupany rate")+ points(leasing_rate[leasing_rate<10],Rent[leasing_rate<10],col = "Blue",pch = 8) 
+legend(x = "topleft", legend = c("Normal Buildings","Removed Buildings (Leasing Rate < 10%)"), col = c("Red","Blue"),pch = 15)
+```
+
+There are still several outliers not removed from the data set, which are buildings with rent higher than 100. On the other hand, some data points removed might not be outliers, which may cause the data to be skewed. Based on the pattern in the graph, instead of occupancy lower than 10%, removing data points with occupancy rate of 0% might result in a more accurate dataset. 
+
+```{r plot2, echo=FALSE,warning=FALSE,message=FALSE}
+plot(leasing_rate, # Plot rent comparison for normal and newly removed dataset
+     Rent,
+     col = "Red", 
+     pch=8,
+     main = "Occupancy Rate Comparison for Normal and Removed (Modified)",
+     ylab = "rent",
+     xlab = "occupany rate")+ points(leasing_rate[leasing_rate==0],Rent[leasing_rate==0],col = "Blue",pch = 8) 
+legend(x = "topleft", legend = c("Normal Buildings","Removed Buildings (Leasing Rate = 0%)"), col = c("Red","Blue"),pch = 15)
+```
+
+Additionally, other confounding variables may also affect the per-square-foot rent, instead of only buildings with zero occupancy rates. Cluster number determine the location the building is located in. By plotting cluster versus rent, we find that some clusters are in more luxurious area, and these clusters have a higher ceiling compared to areas that cost much less.
+
+```{r plot3, echo=FALSE,warning=FALSE,message=FALSE}
+plot(cluster, #Plot Rent in various clusters
+     Rent,
+     col = "Red", 
+     pch=8,
+     main = "Cluster vs Rent",
+     ylab = "rent",
+     xlab = "cluster")
+```
+
+Since the building is projected to be built in East Cesar Chavez, just across I-35 from downtown, the average rent should be fairly high. The cluster value identifier should be in the region between 500-600 or 1000-1200. Now let's visualize the data points we will extract from the data set to get one that has similar features to our project.
+
+
+```{r plot4, echo=FALSE,warning=FALSE,message=FALSE}
+plot(cluster, #plot selected cluster range
+     Rent,
+     col = "Red", 
+     pch=8,
+     main = "Selected Cluster Range",
+     ylab = "rent",
+     xlab = "cluster")+ points(cluster[cluster >= 500 & leasing_rate != 0],Rent[cluster >= 500& leasing_rate != 0],col = "Blue",pch = 8) 
+legend(x = "topleft", legend = c("All Clusters","Clusters Extracted"), col = c("Red","Blue"),pch = 15)
+```
+
+There also seems to be a correlation between rent and size of the building. The projected building size will be 250,000 square feet, so we will extract data points that are close to the level.
+
+```{r plot5, echo=FALSE,warning=FALSE,message=FALSE}
+plot(size, #plot size vs rent
+     Rent,
+     col = "Red", 
+     pch=8,
+     main = "Size vs Rent",
+     ylab = "rent",
+     xlab = "age") + points(size[cluster >= 500 & leasing_rate != 0 & size >=20000 & size <= 300000],Rent[cluster >= 500 & leasing_rate != 0& size >=20000 & size <= 300000],col = "Blue",pch = 8)
+legend(x = "topright", legend = c("All Clusters","Clusters Extracted"), col = c("Red","Blue"),pch = 15)
+```
+
+Now we can extract the data points based on the features selected to minimize confounding variables that may affect the average rent. 
+
+Summary of Rent (Green Buildings) in new dataset:
+
+```{r new df, echo=FALSE,warning=FALSE,message=FALSE}
+selected_df <- subset(green,cluster >= 500 & leasing_rate != 0 & size >=200000 & size <= 300000) #new subset that has new conditions
+selected_green <- subset(selected_df, green_rating == 1) #get green buildings in new subset
+selected_nongreen <- subset(selected_df, green_rating == 0) #get nongreen buildings in new subset
+summary(selected_green$Rent)
+```
+
+Summary of Rent (Non-Green Buildings) in new dataset:
+
+```{r summary nongreen, echo=FALSE,warning=FALSE,message=FALSE}
+summary(selected_nongreen$Rent)
+```
+
+Previously, the first report concluded that there is a 2.7 dollars per square foot difference on average, while in the new dataset with lowered bias, the difference is very minimal. If we look at median there is a 0.22 dollars per square foot difference, whereas if we look at mean there is a 0.31 dollars per square foot difference. If we calculate the extra revenue earned based on the "Excel Guru"'s calculations, the green building provides 250000 x 0.22 = 55,000 dollars extra revenue. 100 million * 5% / 55,000 dollars will result in roughly 90 years to repay the 5% premium. However, the extra revenue earned from rent is not the only positives of going green - we can also explore the difference in energy, water, and waste disposal costs between green and non-green buildings.
+
+Summary for Gas Costs(Green Building) in new dataset:
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+summary(selected_green$Gas_Costs)
+```
+
+Summary for Gas Costs(Non-Green Building) in new dataset:
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+summary(selected_nongreen$Gas_Costs)
+```
+
+Summary for Electricity Costs(Green Building) in new dataset:
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+summary(selected_green$Electricity_Costs)
+```
+
+Summary for Electricity Costs(Non-Green Building) in new dataset:
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+summary(selected_nongreen$Electricity_Costs)
+```
+
+Surprisingly, the average costs for electricity and gas for green and non-green buildings are approximately the same, which may be due to the geographic region being not entirely green or non-green. These summary outputs suggest that the data set might not be fit for predicting whether green buildings save more money or earn more revenue than non green buildings. Features that are specific to green and non-green buildings should be included for a better comparison, such as gas costs for the specific building instead of a cluster.
+
+## Visual story telling part 2: flights at ABIA
+
+```{r, include=FALSE}
+rm(list=ls()) #clear list
+#read csv file and attach dataset for convenience
+abia <- read.csv("ABIA.csv")
+attach(abia)
+dim(abia)
+```
+
+```{r, include=FALSE}
+library(dplyr)
+df <- abia %>% #get count and summary for dataset grouped by month
+  group_by(Month) %>%
+  summarise(counts = n(),
+            avg_dist = mean(Distance)) %>%
+  round(1) #round decimals
+df
+```
+
+First, we take a look at simple plots that show the frequency of flights of each month, day of month, and day of week to find most common flight periods.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+library(ggplot2) #call libraries
+library(ggpubr)
+theme_set(theme_pubr())
+ggplot(df, aes(x = Month, y = counts)) +   #plot frequency of flights grouped by month
+  geom_bar(fill = "#0073C2FF", stat = "identity") +
+  geom_text(aes(label = counts), vjust = -0.3) +
+  theme_pubclean() + 
+  labs(title = "Number of Flights per Month") +
+  scale_x_discrete(limit = c("1","2","3","4","5","6","7","8","9","10","11","12"),
+                   labels = c("Jan","Feb","Mar","Apr","May","Jun","July","Aug","Sep","Oct","Nov","Dec"))
+```
+The graph shows an influx of flights mid-year, while there is a decrease in flights at the end of the year.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(df, aes(x = Month, y = avg_dist)) +   #plot mean distance of flights grouped by month
+  geom_bar(fill = "#0073C2FF", stat = "identity") +
+  geom_text(aes(label = avg_dist), vjust = -0.3) +
+  theme_pubclean() + 
+  labs(title = "Distance per Month") +
+  scale_x_discrete(limit = c("1","2","3","4","5","6","7","8","9","10","11","12"),
+                   labels = c("Jan","Feb","Mar","Apr","May","Jun","July","Aug","Sep","Oct","Nov","Dec"))
+```
+
+The chart shows that May to August, on average, have more long distance flights than other months.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(abia, aes(DayofMonth)) + #plot frequency of flights every day of the month
+  geom_bar(fill = "#0073C2FF") +
+  theme_pubclean() + 
+        labs(title = "Number of Flights every Day of the Month", x = "Day of the Month")
+```
+
+The graph shows a sharp drop in the frequency of flights at the end of each month.
+
+```{r, include= FALSE}
+df2 <- abia %>%
+  group_by(DayOfWeek) %>%  #get frequency for dataset grouped by dayofweek
+  summarise(counts = n())
+df2
+```
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(df2, aes(x = DayOfWeek, y = counts)) + #plot frequency every day of the week
+  geom_bar(fill = "#0073C2FF", stat = "identity") +
+  geom_text(aes(label = counts), vjust = -0.3) +
+  theme_pubclean() + 
+  labs(title = "Number of Flights every Day of the Week") +
+  scale_x_discrete(limit = c("1","2","3","4","5","6","7"),
+                   labels = c("Mon","Tues","Wed","Thur","Fri","Sat","Sun"))
+```
+
+The graph shows a steady rate of flights during the week days, and a lower number on weekends. This is perhaps due to the amount of business travelers.
+
+
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+a <- ggplot(abia, aes(x = Distance)) #plot density graph
+a + geom_density(aes(y = ..count..), fill = "lightgray") +  #modifications
+  geom_vline(aes(xintercept = mean(Distance)), 
+             linetype = "dashed", size = 0.6,
+             color = "#FC4E07")
+```
+
+The density chart shows a high number of short distance flights around 150 miles to 250 miles, and drops sharply to around 400-750 miles. The latter half of the chart shows that there is also a high number of long distance flights that spread from 750 to 1750 miles.
+
+
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+library(ggridges) #call ggridges library
+theme_set(theme_ridges()) #set ridges theme
+ggplot(abia, aes(x = Distance, y = UniqueCarrier)) + #plot unique carrier vs distance
+  geom_density_ridges(aes(fill = UniqueCarrier))
+```
+
+Lastly, we find that the each Unique carrier are specific to a range of distance. For example, MQ specializes in short-distance flights, while B6 only has long distance flights. CO, on the other hand, has both short-distance flights and long-distance flights.
+
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(abia, aes(x = DepTime, y = UniqueCarrier)) + #plot unique carrier vs departure time
+  geom_density_ridges(aes(fill = UniqueCarrier))
+```
+The departure time spread is also different for each unique carrier. Some have departure time centered around 13:00 (9E), while others may have 4 prime departure times at 8:00, 11:00, 15:00, and 19:00 (F9).
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(abia, aes(x = ArrTime, y = UniqueCarrier)) + #plot unique carriers vs arrival time
+  geom_density_ridges(aes(fill = UniqueCarrier))
+```
+
+The arrival time spread for each unique carrier is similar to the departure time spread, with a major difference in the midnight time slot. Some unique carriers do not have flights that arrive at midnight, while others, such as F9 and B6, have slightly more flights that do.
+
+
+In the following graphs, we can observe the difference in delay time that is caused by Carrier, Weather, NAS, Security, and Late Aircraft
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(abia, aes(x = CarrierDelay, y = UniqueCarrier)) + #plot unique carriers vs carrier delay
+  geom_density_ridges(aes(fill = UniqueCarrier)) +
+  xlim(-50,150) #modify min and max x-axis
+```
+
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(abia, aes(x = WeatherDelay, y = UniqueCarrier)) + #plot weather delay for unique carriers
+  geom_density_ridges(aes(fill = UniqueCarrier)) +
+  xlim(-50,150)
+```
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(abia, aes(x = NASDelay, y = UniqueCarrier)) + #plot NAS delay for unique carriers
+  geom_density_ridges(aes(fill = UniqueCarrier)) +
+  xlim(-50,150)
+```
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+
+ggplot(abia, aes(x = SecurityDelay, y = UniqueCarrier)) +
+  geom_density_ridges(aes(fill = UniqueCarrier)) + #plot security delay for unique carrier
+  xlim(-5,10)
+```
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(abia, aes(x = LateAircraftDelay, y = UniqueCarrier)) + #plot late aircraft delay for unique carrier
+  geom_density_ridges(aes(fill = UniqueCarrier)) +
+  xlim(-50,150)
+```
+
+There does not seem to be much of a difference for weather and security delay, as these are external factors not caused by the unique carriers. As for the other reasons, we find that ,YV and EV have the largest spread for Carrier delay, NW and F9 have the largest spread for NAS delay, MQ has the largest spread for Late Aircraft delay. It would probably be the best to avoid these carriers!
+
+## Portfolio Modeling
+
+```{r, include = FALSE}
+#call libraries
+library(mosaic)
+library(quantmod)
+library(foreach)
+```
+
+### Portfolio 1: Risk Averse Portfolio
+
+In the first portfolio, only low risk low yield funds will be included. The funds will be chosen from corporate and government bonds funds and mortgage backed securities funds, which are generally considered safe assets. The weights of each fund will also be equal, at 20% for each fund.
+
+```{r, include = FALSE}
+#bootstrap resampling for ETF funds
+
+#Portfolio 1: Safe funds (also diversified from different asset types)
+myfunds1 = c("GSY", "TLT", "QLTA", "VMBS", "GOVT")
+myprices1 = getSymbols(myfunds1, from = "2016-08-14")
+
+
+# adjust funds to new variable
+for(i in myfunds1) {
+	expr = paste0(i, "a = adjustOHLC(", i, ")")
+	eval(parse(text=expr))
+}
+```
+
+```{r, include = FALSE}
+
+#get adjusted returns and put into matrix
+all_returns1 = cbind(	ClCl(GSYa),
+								ClCl(TLTa),
+								ClCl(QLTAa),
+								ClCl(VMBSa),
+								ClCl(GOVTa))
+head(all_returns1)
+all_returns1 = as.matrix(na.omit(all_returns1))
+```
+
+The following graph shows a sample run over 4 weeks, which shows a steady return.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+# One sample over 4 weeks
+total_wealth = 100000
+my_weights = c(0.2, 0.2, 0.2, 0.2, 0.2) #split weight evenly
+holdings = my_weights * total_wealth #assign holdings of each fund to variable
+n_days = 20 #20 trading days
+wealthtracker = rep(0, n_days) #tracks wealth starting from day 0
+for(today in 1:n_days) { #loop sample over 20 days
+	return.today = resample(all_returns1, 1, orig.ids=FALSE)  
+	holdings = holdings + holdings*return.today
+	total_wealth = sum(holdings)
+	holdings = total_wealth*my_weights #rebalance at the end of day
+	wealthtracker[today] = total_wealth
+}
+total_wealth
+plot(wealthtracker, type='l')
+
+
+```
+
+The following histogram shows a simulation of over 5000 runs, with a mean slightly above the initial wealth at 100,111 dollars. For the risk levels, the standard deviation is 1375.43 dollars and the 5% VaR is 1997.9 dollars, which shows that less than 5% of the time the wealth will drop to that level. 
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#5000 simulations
+initial_wealth = 100000
+sim1 = foreach(i=1:5000, .combine='rbind') %do% { #simulate 5000 times
+	total_wealth = initial_wealth
+	my_weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+	holdings = my_weights * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns1, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		holdings = my_weights * total_wealth 
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+head(sim1)
+hist(sim1[,n_days], 25)
+```
+
+```{r, include=FALSE}
+#Profit/loss
+mean(sim1[,n_days])
+mean(sim1[,n_days] - initial_wealth)
+hist(sim1[,n_days]- initial_wealth, breaks=30)
+```
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#risk via standard deviation
+sd(sim1[,n_days]-initial_wealth)
+```
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#5% Value at Risk(VaR)
+quantile(sim1[,n_days]- initial_wealth, prob=0.05)
+```
+
+
+### Portfolio 2: Semi-Risk Averse Portfolio
+
+In the second portfolio, both low risk and high risk funds will be included. The portfolio will strive to be more diversified to reduce volatility and ensure there is good return. 7 funds will be chosen from fixed income, equities, commodities, and real estate funds, which the weights of each will be split based on sector (25% fixed income, 25% equities, 25% commodities, 25% real estate).
+
+```{r , include=FALSE}
+#Portfolio 1: mixed funds (both safe funds and high yield,volatile funds)
+myfunds2 = c("BKLN", "EBND", "SLQD", "ROBO", "KBWY", "USCI", "FTEC")
+myprices2 = getSymbols(myfunds2, from = "2016-08-14")
+
+
+# adjust funds to new variable
+for(i in myfunds2) {
+	expr = paste0(i, "a = adjustOHLC(", i, ")")
+	eval(parse(text=expr))
+}
+```
+
+```{r, include = FALSE}
+#get adjusted returns and put into matrix
+all_returns2 = cbind(	ClCl(BKLNa),
+								ClCl(EBNDa),
+								ClCl(SLQDa),
+								ClCl(ROBOa),
+								ClCl(KBWYa),
+                ClCl(USCIa),
+								ClCl(FTECa))
+head(all_returns2)
+all_returns2 = as.matrix(na.omit(all_returns2))
+```
+
+The sample run in the following graph shows a high return, possibly due to the higher risk involved in this portfolio.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+# One sample over 4 weeks
+total_wealth = 100000
+my_weights2 = c(0.084, 0.083, 0.083, 0.125, 0.25,0.25,0.125) #split weight according to asset type
+holdings = my_weights2 * total_wealth #assign holdings of each fund to variable
+n_days = 20 #20 trading days
+wealthtracker = rep(0, n_days) #tracks wealth starting from day 0
+for(today in 1:n_days) { #loop sample over 20 days
+	return.today = resample(all_returns2, 1, orig.ids=FALSE)  
+	holdings = holdings + holdings*return.today
+	total_wealth = sum(holdings)
+	holdings = total_wealth*my_weights2 #rebalance at the end of day
+	wealthtracker[today] = total_wealth
+}
+total_wealth
+plot(wealthtracker, type='l')
+
+```
+
+The average return over 5000 simulations for medium risk portfolio, which is 100,531 dollars, is higher than that of low risk portfolio. The standard deviation, however, is much higher at 4152.93, and similarly the 5% VaR is  at 6678.28, which is over 6 percent of initial wealth.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#5000 simulations
+initial_wealth = 100000
+sim2 = foreach(i=1:5000, .combine='rbind') %do% { #simulate 5000 times
+	total_wealth = initial_wealth
+	my_weights2 = c(0.084, 0.083, 0.083, 0.125, 0.25,0.25,0.125)
+	holdings = my_weights2 * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns2, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		holdings = my_weights2 * total_wealth 
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+head(sim2)
+hist(sim2[,n_days], 25)
+```
+
+
+
+```{r, include=FALSE}
+#Profit/loss
+mean(sim2[,n_days])
+mean(sim2[,n_days] - initial_wealth)
+hist(sim2[,n_days]- initial_wealth, breaks=30)
+```
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#risk via standard deviation
+sd(sim2[,n_days]-initial_wealth)
+```
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#5% Value at Risk(VaR)
+quantile(sim2[,n_days]- initial_wealth, prob=0.05)
+```
+
+### Portfolio 3 Risk Tolerant Portfolio
+
+Finally, the third portfolio will be constructed based on risky assets, such as leveraged securities, commodity, and emerging markets funds. The portfolio will try to diversify to obtain a lower volatility, but the ultimate goal is to achieve maximum return. The portfolio will include 5 carefully selected funds with weights for higher risk funds increased.
+
+```{r, include=FALSE}
+#Portfolio 3: Risky funds 
+myfunds3 = c("FAS", "KRBN", "AGT", "DGS", "FLOT") #FAS leveraged equity, KRBN commodity, AGT leveaged bond, DGS emerging markets equity, FLOAT crporate bond to diversify
+myprices3 = getSymbols(myfunds3, from = "2016-08-14")
+
+
+# adjust funds to new variable
+for(i in myfunds3) {
+	expr = paste0(i, "a = adjustOHLC(", i, ")")
+	eval(parse(text=expr))
+}
+```
+
+```{r, include = FALSE}
+
+#get adjusted returns and put into matrix
+all_returns3 = cbind(	ClCl(FASa),
+								ClCl(KRBNa),
+								ClCl(AGTa),
+								ClCl(DGSa),
+								ClCl(FLOTa))
+head(all_returns3)
+all_returns3 = as.matrix(na.omit(all_returns3))
+```
+
+The graph for risky portfolio returns show a steady return into a sharp rise in return. The ceiling for risky portfolio is higher due to the innate risks involved.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+# One sample over 4 weeks
+total_wealth = 100000
+my_weights3 = c(0.25, 0.17, 0.23, 0.20, 0.15) 
+holdings = my_weights3 * total_wealth #assign holdings of each fund to variable
+n_days = 20 #20 trading days
+wealthtracker = rep(0, n_days) #tracks wealth starting from day 0
+for(today in 1:n_days) { #loop sample over 20 days
+	return.today = resample(all_returns3, 1, orig.ids=FALSE)  
+	holdings = holdings + holdings*return.today
+	total_wealth = sum(holdings)
+	holdings = total_wealth*my_weights3 #rebalance at the end of day
+	wealthtracker[today] = total_wealth
+}
+total_wealth
+plot(wealthtracker, type='l')
+
+
+```
+
+
+The average return for the 5000 simulations is 104870.5 dollars, which is a 4.87% increase. In contrast with other portfolios, the average return for risky portfolio is approximately 9 times that of the medium risk portfolio and 43 times that of the low risk portfolio. The standard deviation, however, is 6609.168, which is 1.6 times that of the medium risk portfolio and 4.8 times that of the low risk portfolio. The 5% VaR, surprisingly, is lower than that of the medium risk portfolio at 5563 dollars. This may mean that the medium risk portfolio is not well diversified, so the portfolio may be more volatile than intended.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#5000 simulations
+initial_wealth = 100000
+sim3 = foreach(i=1:5000, .combine='rbind') %do% { #simulate 5000 times
+	total_wealth = initial_wealth
+	my_weights3 = c(0.25, 0.17, 0.23, 0.20, 0.15)
+	holdings = my_weights3 * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns3, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		holdings = my_weights3 * total_wealth 
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+head(sim3)
+hist(sim3[,n_days], 25)
+```
+
+
+
+
+
+```{r, include=FALSE}
+#Profit/loss
+mean(sim3[,n_days])
+mean(sim3[,n_days] - initial_wealth)
+hist(sim3[,n_days]- initial_wealth, breaks=30)
+```
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#risk via standard deviation
+sd(sim3[,n_days]-initial_wealth)
+```
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#5% Value at Risk(VaR)
+quantile(sim3[,n_days]- initial_wealth, prob=0.05)
+```
+
+
+In conclusion, high risk equals to high return. The more risk averse investors will be more secure with slower, but steadier return. On the other hand, risk taking investors will have much higher return, but in turn, have a much lower ceiling for the lowest return, as suggested by the Value at Risk metric. Diversifying the portfolio is also crucial in achieving a more stable return, whether high risk or not, so do not put all the eggs in one basket!
+
+## Market Segmentation
+
+
+```{r, include=FALSE}
+rm(list=ls()) #clear list
+
+social <- read.csv("social_marketing.csv") #read csv file
+social_clean <- social[c(2:5,7:35)]
+summary(social_clean)
+```
+
+### K means clustering
+
+First, we do some data cleaning. Since we do not want spam bots to affect our data, and uncategorized tweets may not provide anything useful, we will remove these variables from the data set. In addition, we do not need to scale our dataset, as all the variable are in the units for number of tweets.
+
+```{r, include=FALSE}
+
+#call libraries
+library(ggplot2)
+library(LICORS)
+library(foreach)
+library(mosaic)
+```
+
+First we check the optimal number of clusters before we perform K means clustering on the data set using the elbow method.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#set seed to obtain same results every run
+set.seed(15)
+
+#set maximum k value to 15
+k.max <- 15
+
+#get within-clusters sum of squares for all k
+wss <- sapply(1:k.max, 
+              function(k){kmeans(na.omit(social_clean), k, nstart=25,iter.max = 15 )$tot.withinss})
+
+#plot
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+We find that the elbow seems to be around 6 clusters, so we will set k equal to 6.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+
+set.seed(15)
+
+#fit kmeans++
+km.res <- kmeanspp(na.omit(social_clean),6,nstart = 25)
+km.res$size
+```
+
+Cluster one has the largest size, with 4100 data points inside, followed by 1284 data points in cluster 5 and 988 data points in cluster 6. The remaining clusters have similar sizes. Now let's explore and try to define each cluster!
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#find mean values for each cluster
+km.res$centers
+```
+
+To begin, we will look primarily on the mean values for cluster 1, which is the largest market segment for NutrientH20. Surprisingly, cluster 1 has the lowest average number of tweets for all of the fields, except for religion and small business. Even for religion and small business, they have one of the lowest mean. This means that a majority of the brand's twitter followers do not even post much.
+
+Next, we examine the mean values for cluster 5, the second largest market segment. Cluster 5 has the highest average number of tweets for chatter, current events, shopping, dating, and the second highest average number of tweets for photo sharing, family, music, eco, business, crafts, and school. On the other end, they have the lowest average number of tweets for religion. This cluster's demographic appears to be a female audience.
+
+Now we infer upon the mean values for cluster 6. This cluster has the highest average number of tweets for food, home/garden, health nutrition, eco, outdoors, crafts, personal fitness. It seems obvious that this cluster is health and environmentally conscious.
+
+Lastly, we will check the highest mean values for the remaining fields, and see what clusters they represent:
+
+2 = Travel, Sports Fandom, Politics, News, Computers, Business, Automotive, Religion, Parenting, Small Business
+3 = Tv Film, Family, , Online Gaming,  College, Sports Playing, Art
+4 = Photo Sharing, Music, Cooking, Beauty, Dating, School, Fashion
+
+Based on these features, cluster 2 seems to be older adults with an active lifestyle. They tend to have a much higher number of tweets in contrast with other clusters, which shows that they are more vocal. Cluster 3 appears to be college students, who post more about their hobbies, while cluster 4 seems to be very similar to cluster 5. 
+
+Now let's visualize some data!
+
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#plot travel vs outdoors by cluster
+qplot(travel,outdoors,data=social_clean,color = factor(km.res$cluster),main = "Outdoors vs Travel") + labs(color = "Cluster")
+```
+
+For Travel and Outdoors, the dominant clusters are 2 and 6, with cluster 2 leaning more towards travel and cluster 6 having more tweets on outdoors.
+
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#plot beauty vs shopping by cluster
+qplot(beauty,shopping,data=social_clean,color = factor(km.res$cluster),main = "Beauty vs Shopping") + labs(color = "Cluster")
+```
+
+
+As suspected earlier, clusters 4 and 5 both have a high number of tweets in the beauty and shopping features. Cluster 5 lean more towards shopping, while cluster 4 have more tweets about beauty.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#plot computers vs college/uni by cluster
+qplot(computers,college_uni,data=social_clean,color = factor(km.res$cluster),main = "Computer vs Uni") + labs(color = "Cluster")
+```
+
+Cluster 2 and 3 are both the major clusters that tweet about computers and uni.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#plot chatter vs shopping by cluster
+qplot(chatter,shopping,data=social_clean,color = factor(km.res$cluster),main = "Chatter vs Shopping") + labs(color = "Cluster")
+```
+
+The majority of followers who tweet about chatter and shopping is cluster 5.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+
+#plot outdoors vs health/nutrition by cluster
+qplot(outdoors,health_nutrition,data=social_clean,color = factor(km.res$cluster),main = "Outdoors vs Health/Nutrition") + labs(color = "Cluster")
+```
+
+Cluster 6 has a high amount of tweets related to outdoors and health/nutrition.
+
+In summary, by clustering the twitter followers, we find that the market is segmented into 4 main segments. The largest follower base is not as vocal and does not post on Twitter much. The second largest follower base is a female customer base that is mainly concerned with chatter, shopping, and current events. The third largest follower base also has a similar size as the female customer base, and this demographic is primarily health and environmentally conscious. By tailoring the Twitter content towards these two main demographics, customer impressions and engagement may see an increase.
+
+## Author Attribution
+
+For author Attribution, we decided to build models to recognize text from three different authors: Benjamin Kang Lim, Darren Schuettler, and Fumiko Fujisaki. To briefly introduce these authors, Benjamin Kang Lim is a Philipino who worked in China and Taiwan. He regularly writes about news related to the Communist Party of China. Darren Schuettler, on the other hand, is a Canadian working in Asia. He writes topics on both Canada and parts of Asia. Lastly, Fumiko Fujisaki usually writes about Japan. 
+
+The models that will be considered are Principle Components Analysis, Naive Bayes, and and Hierarchical Clustering. The files will be preprocessed by removing numbers, punctuation, white spaces, english and SMART stop words, and will all be lowercased. The weighting used will be term frequency to remove the super rare words or phrases that appear in the text.
+
+```{r , include=FALSE}
+
+#call libraries
+library(Rcpp)
+library(tm) 
+library(tidyverse)
+library(slam)
+library(proxy)
+```
+
+```{r, include=FALSE}
+#reader plain function
+readerPlain = function(fname){
+				readPlain(elem=list(content=readLines(fname)), 
+							id=fname, language='en') }
+```
+
+```{r, include = FALSE}
+#put all 50 author's directories into one corpus
+author_dirs = Sys.glob('../STA 380/ReutersC50/C50train/*')
+
+#get three authors directories
+author_dirs = author_dirs[c(4,7,11)]
+file_list = NULL
+labels = NULL
+for(author in author_dirs) {
+	author_name = substring(author, first=29) #clean names
+	files_to_add = Sys.glob(paste0(author, '/*.txt'))
+	file_list = append(file_list, files_to_add)
+	labels = append(labels, rep(author_name, length(files_to_add)))
+}
+
+bdf = lapply(file_list, readerPlain) #bdf stands for benjamin, darren, and fumiko
+names(bdf) = file_list
+names(bdf) = sub('.txt', '', names(bdf))
+file_list
+```
+```{r, include =FALSE}
+my_corpus = Corpus(VectorSource(bdf)) #create corpus
+my_corpus = tm_map(my_corpus, content_transformer(tolower)) #lowercase
+my_corpus = tm_map(my_corpus, content_transformer(removeNumbers)) #remove numbers
+my_corpus = tm_map(my_corpus, content_transformer(removePunctuation)) #remove punctuations
+my_corpus = tm_map(my_corpus, content_transformer(stripWhitespace)) ##remove white spaces
+my_corpus = tm_map(my_corpus, content_transformer(removeWords), stopwords("en")) #remove common english stopwords
+my_corpus = tm_map(my_corpus, content_transformer(removeWords), stopwords("SMART")) #remove smart stopwords
+```
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#put in document term matrix
+DTM = DocumentTermMatrix(my_corpus)
+DTM #matrix summary
+```
+
+We find that the sparsity within the matrix is 97%, which means that 97% of the matrix consists of zeroes. This most likely means that the three authors write about very distinct topics from each other, resulting in little overlaps in the terms used.
+
+After removing the sparese terms, the number of entries decreased from 940k to 262k, as the sparsity percentage dropped to 92%. 
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+DTM = removeSparseTerms(DTM, 0.975)
+DTM #remove terms that are extremely rare
+```
+```{r,include=FALSE}
+X = as.matrix(DTM) #assign DTM to a matrix
+```
+
+
+### Naive Bayes
+
+Now we try building a Naive Bayes classifier model. A smoothing factor is applied to ensure that the output probability is not extremely small. Applying the smoothing factor ensures interpretability of the results.
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+# Naive Bayes, create training sets for three authors
+BKL_train = X[1:45,]
+DS_train = X[51:95,]
+FF_train = X[101:145,]
+
+#Smoothing factor applied
+smooth_count = 1/nrow(X)
+
+#Multinomial Probability Vector for Author 1
+w_BKL = colSums(BKL_train + smooth_count)
+w_BKL = w_BKL/sum(w_BKL)
+
+#Multinomial Probability Vector for Author 2
+w_DS = colSums(DS_train + smooth_count)
+w_DS = w_DS/sum(w_DS)
+
+#Multinomial Probability Vector for Author 3
+w_FF = colSums(FF_train + smooth_count)
+w_FF = w_FF/sum(w_FF)
+```
+
+Now let's try testing on the documents unused to see which author is predicted.
+
+Test data 1 first 25 entries:
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#Test 1
+x_test = X[47,]
+head(sort(x_test, decreasing=TRUE), 25)
+```
+
+It seems like key terms such as chinas and mao suggested that perhaps Benjamin Kang Lim wrote this. Let's see if the model predicts accurately.
+
+```{r,include=FALSE}
+# Compare log probabilities of the three authors
+sum(x_test*log(w_BKL))
+sum(x_test*log(w_DS))
+sum(x_test*log(w_FF))
+```
+
+The log probability was -1384.005 for Benjamin Kang Lim, -1490.33 for Darren Schuettler, and  -1475.14 for Fumiko Fujisaki. The model predicted correctly! Now let's try another document.
+
+Test data 2 first 25 entries:
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#Test 2
+x_test = X[49,]
+head(sort(x_test, decreasing=TRUE), 25)
+```
+
+Terms such as Zhang, chinese, taiwan may seem obvious to a human reader who the author is (Benjamin Kang Lim). Let's check the model predictions.
+
+```{r,include=FALSE}
+# Compare log probabilities of the three authors
+sum(x_test*log(w_BKL))
+sum(x_test*log(w_DS))
+sum(x_test*log(w_FF))
+```
+
+The log probability was -1712.924 for Benjamin Kang Lim, -2298.87 for Darren Schuettler, and  -2336.6 for Fumiko Fujisaki. The probabilities have a much bigger contrast this time. Let's try another document.
+
+
+Test data 3 first 25 entries:
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#Test 3
+x_test = X[99,]
+head(sort(x_test, decreasing=TRUE), 25)
+```
+
+Terms such as canadian, canada, ontario suggest that this is probably an article written by Darren Schuettler.
+
+```{r,include=FALSE}
+# Compare log probabilities of the three authors
+sum(x_test*log(w_BKL))
+sum(x_test*log(w_DS))
+sum(x_test*log(w_FF))
+```
+
+The log probability was -1996.181 for Benjamin Kang Lim, -1713.539 for Darren Schuettler, and  -1783.817 for Fumiko Fujisaki. The probabilities for Darren Schuettler and Fumiko Fujisaki are surprisingly close. This might be due to similar issues discussed in their articles (banks, government, business). Let's try another document.
+
+Test data 4 first 25 entries:
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#Test 4
+x_test = X[148,]
+head(sort(x_test, decreasing=TRUE), 25)
+```
+
+Terms like japan and toyko are indicators that Fumiko Fujisaki was the author. However, the terms are indeed strikingly similar to that of the previous test.Let us see if the model will predict accurately.
+
+```{r,include=FALSE}
+# Compare log probabilities of the three authors
+sum(x_test*log(w_BKL))
+sum(x_test*log(w_DS))
+sum(x_test*log(w_FF))
+```
+
+The log probability was -2025.16 for Benjamin Kang Lim, -2008.82 for Darren Schuettler, and -1669.8 for Fumiko Fujisaki. This time, model has a high change of predicting fumiko fujisaki.
+
+
+Test data 5 first 25 entries:
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#Test 5
+x_test = X[98,]
+head(sort(x_test, decreasing=TRUE), 25)
+```
+
+```{r,include=FALSE}
+# Compare log probabilities of the three authors
+sum(x_test*log(w_BKL))
+sum(x_test*log(w_DS))
+sum(x_test*log(w_FF))
+```
+
+
+The log probability was -2278.31 for Benjamin Kang Lim, -1926.6 for Darren Schuettler, and -2017.87 for Fumiko Fujisaki. The log probability difference was close, but the model still predicted correctly. 
+
+Test data 6 first 25 entries:
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#Test 5
+x_test = X[147,]
+head(sort(x_test, decreasing=TRUE), 25)
+```
+
+```{r,include=FALSE}
+# Compare log probabilities of the three authors
+sum(x_test*log(w_BKL))
+sum(x_test*log(w_DS))
+sum(x_test*log(w_FF))
+```
+
+
+The log probability was -2300.79 for Benjamin Kang Lim, -2199.6 for Darren Schuettler, and -1885.85 for Fumiko Fujisaki. The model predicted correctly again. Next, We will move on to the hierarchical clustering model to see if it can predict better than Naive Bayes. 
+
+### Hierarchical Clustering
+
+For Hierarchical Clustering, we will use Inverse Document Frequency to find terms that appear too often and remove them from the dataset. Then we will calculate cosine distance to form clusters.
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#get tfidf weights
+tfidf = weightTfIdf(DTM)
+
+#cosine distance matrix
+cosine_dist_mat = proxy::dist(as.matrix(tfidf), method='cosine')
+tree = hclust(cosine_dist_mat)
+
+#plot dendrogram
+plot(tree)
+clust3 = cutree(tree, k=3)
+
+```
+
+Cluster 1:
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+
+# inspect the first cluster
+which(clust3 == 1)
+
+```
+
+After forming a hierarchical cluster, we cut the tree into 3 separate cluster. The first cluster seems to be Benjamin Kang Lim, with accuracy of 100%. All of BKL's documents are correctly in cluster 1.
+
+
+Cluster 2:
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+#inspect cluster 2
+which(clust3 == 2)
+```
+
+The second cluster seems to be Fumiko Fujisaki. This time, however, the prediction accuracy is 90%. The cluster is missing documents 99 and 100, while containing documents 51,53, and 98. Cluster 3 should also have the same prediction accuracy of 90%. This error in predictor may be attributed to the observation made above: Fumiko Fujisaki and Darren Shuettler both write about similar topics, albeit on different countries and governments.
+
+
+```{r, include = FALSE}
+#Look at the incorrectly predicted documents
+content(bdf[[51]])
+content(bdf[[53]])
+content(bdf[[98]])
+content(bdf[[99]])
+content(bdf[[100]])
+```
+
+By observing the incorrectly predicted documents, we find that these documents are all on the same topic - banks, financial services. 
+
+### Principle Component Analysis
+
+Lastly, we perform Principle Component Analysis. 
+
+```{r,include=FALSE}
+# Principle Component Analysis
+#assign matrix
+X = as.matrix(tfidf)
+summary(colSums(X))
+scrub_cols = which(colSums(X) == 0)
+X = X[,-scrub_cols]
+
+pca = prcomp(X, scale=TRUE)
+
+# around 31 components to achieve 50% of the variation
+summary(pca) 
+```
+
+From the analysis, we find that 32 components explain approximately 50% of the variation over almost 2000 features. If we look at the loadings for component 1 and 2 below, there actually does not seem to much in common for the two components.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Look at the loadings for component 1
+pca$rotation[order(abs(pca$rotation[,1]),decreasing=TRUE),1][1:25]
+```
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Look at the loadings for component 2
+pca$rotation[order(abs(pca$rotation[,2]),decreasing=TRUE),2][1:25]
+```
+
+The graph of the two principal components seem to clutter in two big groups, one for components 80 and above, and another for 10-50. This shows that Fumiko Fujisaki and Darren Shuettler use words or phrases that are extremely similar.
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+##Graph the direction of both Components
+pca$x[,1:2]
+
+plot(pca$x[,1:2], xlab="PCA 1 direction", ylab="PCA 2 direction", bty="n",
+     type='n')
+text(pca$x[,1:2], labels = 1:length(bdf), cex=0.7)
+```
+
+In conclusion, all three models predict Benjamin Kang Lim very well, yet sometimes get mixed up between the words in Darren Shuettler and Fumiko Fujisaki. The best model was Naive Bayes Classifier, since all the tests conducted predicted correctly, even ones that are clustered incorrectly.
+
+
+## Association rule mining
+
+We will inspect whether there are any interesting associations between the grocery list and provide insights on the data. First we read the text file as basket format in order to process the transaction data.
+
+```{r, include=FALSE}
+
+#call libraries
+library(tidyverse)
+library(arules)
+library(arulesViz)
+
+```
+
+```{r, include=FALSE}
+rm(list=ls())
+groc <- read.transactions("groceries.txt",format = "basket", sep = ",") #read text file into basket
+
+```
+
+
+From the summary we find that milk is the most frequent item, followed by vegetables and rolls/buns.
+
+```{r,include=FALSE}
+summary(groc)
+```
+
+After building association rules, we find that the maximum lift is approximately 4.5 and the maximum confidence is around 0.6. Next we will filter the association rules by high confidence and high lift to find interesting associations.
+
+```{r, include = FALSE}
+groc_asso = apriori(groc,  #build association rules
+	parameter=list(support=.005, confidence=.1, maxlen=5))
+
+inspect(groc_asso) #check association rules
+```
+
+We first try setting the condition to filter rules with lift higher than 4. Only 4 associations have lift higher than 4, with ham and white bread having the highest lift. This highly suggests that ham and white bread are complements of each other. Next we see shoppers who buy citrus fruits, other vegetables, whole milk also buy root vegetables, and shoppers who buy butter and other vegetables also buy sour cream. Interestingly enough the last association for butter, other vegetables and sour cream is not as obviously a complement as the others.
+
+Then, we check rules with high confidence of higher than 0.6. We find that there is 22 association rules with such high confidence, with whole milk on the right hand side of the rule for most of the rules. The remaining item in the right hand side is other vegetables. This shows that whole milk and vegetables are most commonly bought with other items.
+
+Lastly, we filter rules with both high confidence and high lift to see what associations are present. The condition we set is life above 3 and confidence above 0.5. We find that mainly 'other vegetables ' is on the right hand side, implying how complementary and commonly bought this item is.
+
+```{r , include = FALSE}
+#filter the association rule based on conditions (high lift and high confidence)
+inspect(subset(groc_asso, subset=lift > 4)) 
+inspect(subset(groc_asso, subset=confidence > 0.6))
+inspect(subset(groc_asso, subset=lift > 3 & confidence > 0.5))
+```
+
+After plotting the association rules, we find that support of each association rule is generally quite low, while confidence varies from 0 to 0.6. The association rules with order 3 seem to be the most prominent with a smaller support value on average. Association rules with order 2 are more scattered, with a slightly higher support on average than order 3. Association rules with order 4 generally have high confidence and low support, while association rules with order 1 have much higher support with lower confidence.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#plot with different orders
+plot(groc_asso, method= "two-key plot")
+```
+
+Next, we build a network graph to show the associations and the major players of the grocery items.
+
+```{r , echo=FALSE,warning=FALSE,message=FALSE}
+#export graph to edit in gephi
+saveAsGraph(head(groc_asso, n = 1000, by = "lift"), file = "groc_asso.graphml") 
+```
+
+![Association Graph](Association Network.png)
+As shown in the association network, we find that items from the same cluster have the same color. Fruits and vegetables form the purple cluster, dairy products form the green cluster, and beverages form the blue cluster.
+
+In summary, the association rule results show some product associations that are expected. Milk and vegetables are generally bought with other items for every transaction, and bread and ham are complements of each other. The only surprising association rule with high degree of association is butter, vegetable, and sour cream. Sour cream does not seem to fit in with vegetables and butter, but these are most likely common grocery goods that Americans buy.
+
+
